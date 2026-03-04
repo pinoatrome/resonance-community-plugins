@@ -1,6 +1,6 @@
 # Resonance Community Plugins
 
-[![Update Index](https://github.com/resonance-plugins/community/actions/workflows/update-index.yml/badge.svg)](https://github.com/resonance-plugins/community/actions/workflows/update-index.yml)
+[![Update Index](https://github.com/endegelaende/resonance-community-plugins/actions/workflows/update-index.yml/badge.svg)](https://github.com/endegelaende/resonance-community-plugins/actions/workflows/update-index.yml)
 
 Community plugin repository for the [Resonance](https://github.com/endegelaende/resonance-server) music server.
 
@@ -10,7 +10,9 @@ Plugins listed here appear in the **Available** tab of the Resonance Plugin Mana
 
 ## 📦 Available Plugins
 
-No community plugins published yet — be the first! See [Contributing](#-contributing) below.
+| Plugin | Version | Description | Author |
+|--------|---------|-------------|--------|
+| [raopbridge](plugins/raopbridge/) | 0.1.0 | AirPlay bridge — uses philippe44's squeeze2raop to make AirPlay devices available as Squeezebox players | Pinoatrome |
 
 ---
 

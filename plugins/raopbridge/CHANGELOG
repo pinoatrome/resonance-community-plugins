@@ -1,0 +1,24 @@
+0.1.0
+  - Migrated to Resonance community plugin repository
+  - Binaries no longer bundled; downloaded on-demand from philippe44/LMS-Raop
+  - Cleaned up logging (use %s formatting instead of f-strings)
+  - Plugin uses PluginContext.server_info for squeeze2raop server address
+  - Tests adapted: ensure_binary mocked, platform-independent path assertions
+  - Added plugin.toml manifest
+
+0.0.1
+  - Initial development by Pinoatrome
+  - Moved to plugin framework
+  - Added pytest suite
+  - Added squeeze2raop configuration (XML parse/dump)
+  - Added raopbridge plugin preferences (JSON settings)
+  - Added squeeze2raop executable management
+  - Added PID file and logging (category/levels)
+  - Added GNU General Public License, version 2
+  - Generate squeeze2raop config file in interactive mode
+  - Added plugin commands and REST API
+  - Added plugin settings view
+  - Added registered device listing
+  - Added device management (add/update/remove)
+  - Evaluate server slimproto endpoint exposed to the plugin
+  - POC to use squeeze2raop pre-built native executable in Python
