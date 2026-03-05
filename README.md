@@ -6,13 +6,18 @@ Community plugin repository for the [Resonance](https://github.com/endegelaende/
 
 Plugins listed here appear in the **Available** tab of the Resonance Plugin Manager UI and can be installed with a single click.
 
+> **Want to build a plugin?**
+> → [Plugin Tutorial](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_TUTORIAL.md) — step-by-step from scratch
+> → [Plugin API Reference](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_API.md) — complete API docs (incl. §19 SDUI)
+> → [raopbridge](plugins/raopbridge/) — reference implementation with full Web UI
+
 ---
 
 ## 📦 Available Plugins
 
-| Plugin | Version | Description | Author |
-|--------|---------|-------------|--------|
-| [raopbridge](plugins/raopbridge/) | 0.1.0 | AirPlay bridge — uses philippe44's squeeze2raop to make AirPlay devices available as Squeezebox players. Full Web UI via Server-Driven UI (SDUI) with device management, settings, and per-device configuration. | Pinoatrome |
+| Plugin                            | Version | Description                                                                                                                                                                                                      | Author     |
+| --------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| [raopbridge](plugins/raopbridge/) | 0.2.0   | AirPlay bridge — uses philippe44's squeeze2raop to make AirPlay devices available as Squeezebox players. Full Web UI via Server-Driven UI (SDUI) with device management, settings, and per-device configuration. | Pinoatrome |
 
 ---
 
@@ -184,13 +189,13 @@ and the [raopbridge plugin](plugins/raopbridge/) as a reference implementation.
 
 ### Categories
 
-| Category | Use for |
-|----------|---------|
-| `music` | Music discovery, metadata, lyrics, etc. |
-| `radio` | Internet radio sources |
-| `podcast` | Podcast directories and tools |
-| `tools` | Utilities, maintenance, integrations |
-| `misc` | Everything else |
+| Category  | Use for                                 |
+| --------- | --------------------------------------- |
+| `music`   | Music discovery, metadata, lyrics, etc. |
+| `radio`   | Internet radio sources                  |
+| `podcast` | Podcast directories and tools           |
+| `tools`   | Utilities, maintenance, integrations    |
+| `misc`    | Everything else                         |
 
 ---
 
@@ -207,11 +212,13 @@ git push origin my-plugin-v1.0.0
 ```
 
 The `build-release.yml` workflow will:
+
 1. Package the plugin directory into a ZIP
 2. Compute the SHA-256 checksum
 3. Create a GitHub Release with the ZIP attached
 
 The `update-index.yml` workflow then:
+
 1. Scans all `plugins/*/plugin.toml` files
 2. Matches them with the latest GitHub Release
 3. Generates `index.json`
@@ -237,5 +244,4 @@ Community plugins are contributed under their respective licenses as specified b
 - [Resonance Server](https://github.com/endegelaende/resonance-server) — the main server project
 - [Plugin API Reference](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_API.md) — complete API docs including SDUI (§19)
 - [Plugin Tutorial](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_TUTORIAL.md) — step-by-step guide to building a plugin
-- [Plugin Repository Guide](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_REPOSITORY.md) — how to publish plugins
 - [Plugin System Overview](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGINS.md) — general plugin system overview

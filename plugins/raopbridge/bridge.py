@@ -185,7 +185,9 @@ async def ensure_binary(bin_name: str, bin_dir: Path) -> Path:
     Returns the full path to the binary.
     """
     bin_path = bin_dir / bin_name
-    if bin_path.is_file() and os.access(bin_path, os.X_OK if os.name != "nt" else os.F_OK):
+    if bin_path.is_file() and os.access(
+        bin_path, os.X_OK if os.name != "nt" else os.F_OK
+    ):
         logger.debug("Binary already present: %s", bin_path)
         return bin_path
 
@@ -232,7 +234,9 @@ def check_valid_bin(path: Path | None) -> None:
     if not path.is_file():
         raise RuntimeError(f'Invalid value for squeeze2raop: unable to find "{path}"')
     if os.name != "nt" and not os.access(path, os.X_OK):
-        raise RuntimeError(f'Invalid value for squeeze2raop: unable to execute "{path}"')
+        raise RuntimeError(
+            f'Invalid value for squeeze2raop: unable to execute "{path}"'
+        )
 
 
 def build_path_bin(bin_name: str | None, data_dir: str) -> Path | None:
@@ -295,12 +299,20 @@ class RaopBridge:
     logging_file: str = "squeeze2raop.log"
     pid_file: str = "squeeze2raop.pid"
     data_dir: str = field(init=True, kw_only=True)
-    raop_config: RaopConfig | None = field(
-        init=False, default=None, kw_only=True
-    )
+    raop_config: RaopConfig | None = field(init=False, default=None, kw_only=True)
     bridge_process: subprocess.Popen | None = field(  # type: ignore[type-arg]
         init=False, default=None, kw_only=True
     )
+    startup_error: str | None = field(init=False, default=None, kw_only=True)
+    """Non-None when ``start()`` encountered a recoverable error
+    (e.g. binary download failed).  The plugin still starts so the
+    SDUI page is reachable, but activation is blocked until the
+    error is resolved (e.g. via a "Retry Download" button)."""
+
+    @property
+    def is_ready(self) -> bool:
+        """``True`` when the binary is validated and bridge can be activated."""
+        return self.startup_error is None
 
     @classmethod
     def from_settings(cls, path: Path, **kwargs: Any) -> "RaopBridge":
@@ -331,7 +343,14 @@ class RaopBridge:
 
         Downloads the binary from philippe44's repository if it is not
         already present in the data directory.
+
+        This method **never raises**.  If the binary cannot be obtained
+        or validated, the error is stored in :attr:`startup_error` so
+        the SDUI page can display it.  The plugin continues to start
+        (UI handler, REST routes, JSON-RPC commands are registered) and
+        the user can retry the download from the web UI.
         """
+        self.startup_error = None
         logger.debug("Checking bin value: %s", self.bin)
         bin_dir = Path(self.data_dir) / "bin"
 
@@ -340,19 +359,32 @@ class RaopBridge:
             try:
                 await ensure_binary(self.bin, bin_dir)
             except Exception as exc:
-                logger.error(
-                    "Failed to download squeeze2raop binary '%s': %s",
-                    self.bin,
-                    exc,
-                )
-                raise RuntimeError(
-                    f"Could not obtain squeeze2raop binary '{self.bin}'. "
+                msg = (
+                    f"Could not obtain squeeze2raop binary '{self.bin}': {exc}. "
                     f"Check your internet connection or download it manually "
                     f"from {_UPSTREAM_BIN_URL}/{self.bin} into {bin_dir}"
-                ) from exc
+                )
+                logger.error(msg)
+                self.startup_error = msg
+                return
+        else:
+            msg = (
+                "No binary name configured. Check platform detection — "
+                f"system={platform.system()}, machine={platform.machine()}"
+            )
+            logger.error(msg)
+            self.startup_error = msg
+            return
 
+        # Validate the binary
         bin_path = build_path_bin(self.bin, self.data_dir)
-        check_valid_bin(bin_path)
+        try:
+            check_valid_bin(bin_path)
+        except RuntimeError as exc:
+            msg = f"Binary validation failed: {exc}"
+            logger.error(msg)
+            self.startup_error = msg
+            return
 
         config_path = Path(self.data_dir) / self.config
         if config_path.is_file():
@@ -363,12 +395,58 @@ class RaopBridge:
                 "(if autosave is enabled) in %s",
                 config_path,
             )
-        logger.debug(
-            "RaopBridge started inactive — bridge will activate "
+        logger.info(
+            "RaopBridge ready — bridge will activate "
             "(if autostart) after server.started event"
         )
 
+    async def retry_binary_download(self) -> str | None:
+        """Re-attempt to download and validate the binary.
+
+        Returns ``None`` on success, or an error message string on
+        failure.  On success :attr:`startup_error` is cleared.
+        """
+        logger.info("Retrying binary download for '%s'", self.bin)
+        bin_dir = Path(self.data_dir) / "bin"
+
+        if not self.bin:
+            msg = "No binary name configured — cannot retry"
+            logger.error(msg)
+            self.startup_error = msg
+            return msg
+
+        try:
+            await ensure_binary(self.bin, bin_dir)
+        except Exception as exc:
+            msg = (
+                f"Download failed: {exc}. "
+                f"Check your internet connection or download manually "
+                f"from {_UPSTREAM_BIN_URL}/{self.bin} into {bin_dir}"
+            )
+            logger.error(msg)
+            self.startup_error = msg
+            return msg
+
+        bin_path = build_path_bin(self.bin, self.data_dir)
+        try:
+            check_valid_bin(bin_path)
+        except RuntimeError as exc:
+            msg = f"Binary validation failed after download: {exc}"
+            logger.error(msg)
+            self.startup_error = msg
+            return msg
+
+        self.startup_error = None
+        logger.info("Binary '%s' is now available and validated", self.bin)
+        return None
+
     async def activate_bridge(self) -> None:
+        if not self.is_ready:
+            logger.error(
+                "Cannot activate bridge — startup error: %s",
+                self.startup_error,
+            )
+            return
         if self.is_active:
             logger.warning("Bridge is already active")
             return
@@ -410,9 +488,7 @@ class RaopBridge:
             args += f" -f {logging_path}"
             logger.debug("Logging to %s", logging_path)
             if self.debug_enabled:
-                logger.debug(
-                    "Debug: %s=%s", self.debug_category, self.debug_level
-                )
+                logger.debug("Debug: %s=%s", self.debug_category, self.debug_level)
                 args += f" -d {self.debug_category}={self.debug_level}"
         if self.config:
             config_path = Path(self.data_dir) / self.config

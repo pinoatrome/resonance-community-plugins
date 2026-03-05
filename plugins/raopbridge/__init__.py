@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from dataclasses import asdict as dataclass_asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -64,6 +65,13 @@ from .bridge import (
     save_settings,
 )
 from .config import RaopCommonOptions, RaopDevice
+from .log_buffer import (
+    clear_logs,
+    get_log_stats,
+    get_recent_logs,
+    install_log_buffer,
+    uninstall_log_buffer,
+)
 from .serializers import RaopCommonOptionsSerializer, RaopDeviceSerializer
 
 logger = logging.getLogger(__name__)
@@ -74,6 +82,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _raop_bridge: RaopBridge | None = None
+_ctx: PluginContext | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +127,19 @@ _SAMPLE_RATE_OPTIONS = [
 
 
 async def setup(ctx: PluginContext) -> None:
-    """Called by PluginManager during server startup."""
-    global _raop_bridge
+    """Called by PluginManager during server startup.
+
+    This function **never raises** (unless something truly catastrophic
+    happens like an import error).  If the squeeze2raop binary cannot be
+    downloaded or validated, the plugin still starts — the SDUI page will
+    show the error and offer a "Retry Download" button.
+    """
+    global _raop_bridge, _ctx
+    _ctx = ctx
+
+    # Install the in-memory log buffer so we can show logs in the UI
+    install_log_buffer()
+    logger.info("raopbridge plugin starting up")
 
     server_info = ctx.server_info or {}
 
@@ -134,8 +154,17 @@ async def setup(ctx: PluginContext) -> None:
     _raop_bridge = RaopBridge.from_settings(path, server=server)
     logger.info("RaopBridge instance loaded using settings from %s", path)
 
+    # start() no longer raises — errors are stored in startup_error
     await _raop_bridge.start()
-    logger.info("RaopBridge instance started (bridge still inactive)")
+    if _raop_bridge.is_ready:
+        logger.info(
+            "RaopBridge ready (bridge still inactive — will activate on server.started)"
+        )
+    else:
+        logger.warning(
+            "RaopBridge started with errors — bridge cannot activate: %s",
+            _raop_bridge.startup_error,
+        )
 
     # 1) Register JSON-RPC command
     ctx.register_command("raopbridge", raopbridge_cmd)
@@ -146,7 +175,7 @@ async def setup(ctx: PluginContext) -> None:
     # 3) Register REST routes
     ctx.register_route(define_api_router())
 
-    # 4) Register SDUI handlers
+    # 4) Register SDUI handlers — always register so the page is reachable
     ctx.register_ui_handler(get_ui)
     ctx.register_action_handler(handle_action)
 
@@ -155,11 +184,15 @@ async def setup(ctx: PluginContext) -> None:
 
 async def teardown(ctx: PluginContext) -> None:
     """Called by PluginManager during server shutdown."""
-    global _raop_bridge
+    global _raop_bridge, _ctx
 
     if _raop_bridge:
         await _raop_bridge.close()
     _raop_bridge = None
+    _ctx = None
+
+    # Remove the log buffer handler and free memory
+    uninstall_log_buffer()
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +208,13 @@ async def _on_server_started(_: Event) -> None:
     )
     if not _raop_bridge:
         logger.warning("_on_server_started called before plugin initialised — skipping")
+        return
+
+    if not _raop_bridge.is_ready:
+        logger.warning(
+            "raopbridge: skipping auto-activation — startup error: %s",
+            _raop_bridge.startup_error,
+        )
         return
 
     if _raop_bridge.active_at_startup:
@@ -199,6 +239,22 @@ async def get_ui(ctx: PluginContext) -> Page:
                     message="The raopbridge plugin is not initialised.",
                     severity="error",
                 ),
+                _build_log_card(),
+            ],
+        )
+
+    # If the bridge has a startup error, show a focused diagnostics page
+    if not _raop_bridge.is_ready:
+        return Page(
+            title="AirPlay Bridge",
+            icon="cast",
+            refresh_interval=10,
+            components=[
+                _build_startup_error_card(
+                    _raop_bridge.startup_error or "Unknown error"
+                ),
+                _build_log_card(),
+                _build_about_tab_card(),
             ],
         )
 
@@ -209,6 +265,7 @@ async def get_ui(ctx: PluginContext) -> Page:
     devices_tab = await _build_devices_tab(is_active)
     settings_tab = _build_settings_tab(is_active, settings)
     advanced_tab = await _build_advanced_tab(is_active)
+    log_tab = _build_log_tab()
     about_tab = _build_about_tab()
 
     return Page(
@@ -216,7 +273,16 @@ async def get_ui(ctx: PluginContext) -> Page:
         icon="cast",
         refresh_interval=5,
         components=[
-            Tabs(tabs=[status_tab, devices_tab, settings_tab, advanced_tab, about_tab]),
+            Tabs(
+                tabs=[
+                    status_tab,
+                    devices_tab,
+                    settings_tab,
+                    advanced_tab,
+                    log_tab,
+                    about_tab,
+                ]
+            ),
         ],
     )
 
@@ -226,9 +292,127 @@ async def get_ui(ctx: PluginContext) -> Page:
 # ---------------------------------------------------------------------------
 
 
+def _build_startup_error_card(error_msg: str) -> Card:
+    """Build the error card shown when the binary is not available."""
+    return Card(
+        title="⚠ Bridge Not Ready",
+        children=[
+            Alert(
+                message=error_msg,
+                severity="error",
+                title="Startup Error",
+            ),
+            Text(
+                "The squeeze2raop binary could not be downloaded or validated. "
+                "The bridge cannot activate until this is resolved.",
+                color="yellow",
+                size="sm",
+            ),
+            Row(
+                children=[
+                    Button(
+                        "Retry Download",
+                        action="retry_download",
+                        style="primary",
+                        icon="download",
+                    ),
+                ],
+                gap="3",
+            ),
+        ],
+    )
+
+
+def _build_log_card(*, collapsed: bool = False) -> Card:
+    """Build a card showing recent plugin log entries."""
+    log_entries = get_recent_logs(limit=50)
+    log_stats = get_log_stats()
+
+    children: list = []
+
+    if not log_entries:
+        children.append(Text("No log entries captured yet.", color="gray", size="sm"))
+    else:
+        # Build a markdown code block with the log entries
+        log_lines: list[str] = []
+        for entry in log_entries:
+            level_icon = {
+                "ERROR": "❌",
+                "WARNING": "⚠️",
+                "INFO": "ℹ️",
+                "DEBUG": "🔍",
+                "CRITICAL": "🔥",
+            }.get(entry["level"], "•")
+            ts_short = entry["timestamp"][11:19]  # HH:MM:SS
+            log_lines.append(
+                f"``{ts_short}`` {level_icon} **{entry['level']}** — {entry['message']}"
+            )
+
+        md_content = "\n\n".join(log_lines)
+
+        if log_stats.get("dropped", 0) > 0:
+            md_content = (
+                f"*({log_stats['dropped']} older entries dropped)*\n\n" + md_content
+            )
+
+        children.append(Markdown(md_content))
+
+    children.append(
+        Row(
+            children=[
+                Button("Clear Logs", action="clear_logs", style="secondary"),
+            ],
+            gap="3",
+            justify="end",
+        )
+    )
+
+    return Card(
+        title=f"Plugin Logs ({log_stats.get('count', 0)} entries)",
+        collapsible=True,
+        collapsed=collapsed,
+        children=children,
+    )
+
+
+def _build_log_tab() -> Tab:
+    """Build the Log tab for the tabbed interface."""
+    return Tab(
+        label="Logs",
+        icon="scroll-text",
+        children=[_build_log_card(collapsed=False)],
+    )
+
+
+def _build_about_tab_card() -> Card:
+    """Build the About content as a standalone Card (used on the error page)."""
+    md_content = (
+        "## AirPlay Bridge\n\n"
+        "This plugin uses **squeeze2raop** by "
+        "[philippe44](https://github.com/philippe44) to make AirPlay devices "
+        "available as Squeezebox players in Resonance.\n\n"
+        "### Links\n\n"
+        "- [squeeze2raop on GitHub](https://github.com/philippe44/LMS-Raop)\n"
+        "- [Resonance Documentation](https://github.com/endegelaende/resonance-server)\n"
+    )
+    return Card(
+        title="About",
+        collapsible=True,
+        collapsed=True,
+        children=[Markdown(md_content)],
+    )
+
+
 def _build_status_tab(is_active: bool, settings: dict[str, Any]) -> Tab:
     """Build the Status tab content."""
-    if is_active:
+    children: list = []
+
+    # Check if bridge has a startup error (binary not available)
+    has_startup_error = _raop_bridge is not None and not _raop_bridge.is_ready
+
+    if has_startup_error:
+        badge = StatusBadge("Not Ready", color="yellow")
+    elif is_active:
         badge = StatusBadge("Active", color="green")
     else:
         badge = StatusBadge("Inactive", color="red")
@@ -247,22 +431,36 @@ def _build_status_tab(is_active: bool, settings: dict[str, Any]) -> Tab:
             KeyValue(items=kv_items),
         ],
     )
+    children.append(status_card)
 
-    if is_active:
-        controls = Row(
-            children=[
-                Button("Deactivate", action="deactivate", style="danger", confirm=True),
-                Button("Restart", action="restart", style="secondary", confirm=True),
-            ]
+    # Show startup error with retry button
+    if has_startup_error:
+        children.append(
+            _build_startup_error_card(_raop_bridge.startup_error or "Unknown error")
+        )
+    elif is_active:
+        children.append(
+            Row(
+                children=[
+                    Button(
+                        "Deactivate", action="deactivate", style="danger", confirm=True
+                    ),
+                    Button(
+                        "Restart", action="restart", style="secondary", confirm=True
+                    ),
+                ]
+            )
         )
     else:
-        controls = Row(
-            children=[
-                Button("Activate", action="activate", style="primary"),
-            ]
+        children.append(
+            Row(
+                children=[
+                    Button("Activate", action="activate", style="primary"),
+                ]
+            )
         )
 
-    return Tab(label="Status", icon="activity", children=[status_card, controls])
+    return Tab(label="Status", icon="activity", children=children)
 
 
 # ---------------------------------------------------------------------------
@@ -672,6 +870,15 @@ def _build_about_tab() -> Tab:
 
 async def handle_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
     """Handle SDUI action dispatches from the frontend."""
+
+    # Actions that work even without a bridge instance
+    match action:
+        case "clear_logs":
+            clear_logs()
+            return {"message": "Logs cleared"}
+        case "retry_download":
+            return await _handle_retry_download()
+
     if _raop_bridge is None:
         return {"error": "raopbridge plugin not initialised"}
 
@@ -692,6 +899,18 @@ async def handle_action(action: str, params: dict[str, Any]) -> dict[str, Any]:
             return await _handle_update_device(params)
         case _:
             return {"error": f"Unknown action: {action}"}
+
+
+async def _handle_retry_download() -> dict[str, Any]:
+    """Handle retry_download action — re-attempt binary download."""
+    if _raop_bridge is None:
+        return {"error": "raopbridge plugin not initialised"}
+
+    error = await _raop_bridge.retry_binary_download()
+    if error is not None:
+        return {"error": f"Download failed: {error}"}
+
+    return {"message": "Binary downloaded and validated successfully!"}
 
 
 async def _handle_save_settings(params: dict[str, Any]) -> dict[str, Any]:
@@ -973,6 +1192,13 @@ async def raopbridge_cmd(ctx: CommandContext, command: list[Any]) -> dict[str, A
 
 async def _activate() -> dict[str, Any]:
     assert _raop_bridge is not None
+    if not _raop_bridge.is_ready:
+        return {
+            "error": (
+                "Cannot activate — binary not available. "
+                "Use 'Retry Download' to resolve."
+            )
+        }
     await _raop_bridge.activate_bridge()
     await asyncio.sleep(1)  # give it a moment to start up
     return {"result": _raop_bridge.is_active}
