@@ -32,3 +32,7 @@ _site/
 # AI Assistant Context (local only)
 CLAUDE.md
 .claude/
+
+# Private implementation plans (local only)
+TIDAL.md
+SLEEP.md

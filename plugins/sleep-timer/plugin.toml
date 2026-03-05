@@ -1,0 +1,66 @@
+[plugin]
+name = "sleep-timer"
+version = "1.0.0"
+description = "Sleep timer with configurable fade-out, multi-player support, and SDUI dashboard"
+author = "Resonance Community"
+min_resonance_version = "0.1.0"
+category = "tools"
+
+[ui]
+enabled = true
+sidebar_label = "Sleep Timer"
+sidebar_icon = "moon"
+
+# ---------------------------------------------------------------------------
+# Settings (deklarativ — Plugin Settings UI automatisch)
+# ---------------------------------------------------------------------------
+
+[settings.default_duration]
+type = "select"
+label = "Default Timer Duration"
+description = "Default timer duration when starting a new sleep timer"
+default = "30"
+options = ["15", "30", "45", "60", "90"]
+order = 10
+
+[settings.fade_duration]
+type = "int"
+label = "Fade-Out Duration (seconds)"
+description = "How many seconds before the timer ends to begin fading out the volume. Set to 0 to disable fade-out (hard stop)."
+default = 30
+min = 0
+max = 120
+order = 20
+
+[settings.fade_steps]
+type = "int"
+label = "Fade Steps"
+description = "Number of volume steps during fade-out. More steps = smoother fade but more commands sent to the player."
+default = 15
+min = 3
+max = 30
+order = 30
+
+[settings.stop_action]
+type = "select"
+label = "Action When Timer Expires"
+description = "What to do when the sleep timer ends"
+default = "pause"
+options = ["pause", "stop"]
+order = 40
+
+[settings.restore_volume]
+type = "bool"
+label = "Restore Volume After Sleep"
+description = "Restore the player volume to its original level after the timer stops playback. If disabled, volume stays at the faded-out level."
+default = true
+order = 50
+
+[settings.max_history]
+type = "int"
+label = "Maximum History Entries"
+description = "How many timer events to keep in the history. Set to 0 to disable history."
+default = 50
+min = 0
+max = 500
+order = 60

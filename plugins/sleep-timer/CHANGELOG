@@ -1,0 +1,20 @@
+sleep-timer CHANGELOG
+=====================
+
+v1.0.0 (2026-03-05)
+--------------------
+Initial release.
+
+Features:
+- Per-player sleep timers with configurable duration (1–480 minutes)
+- Preset durations: 15, 30, 45, 60, 90 minutes + custom
+- Smooth volume fade-out before stopping/pausing (configurable 0–120 seconds)
+- Volume restore after timer expiry
+- SDUI dashboard with 3 tabs: Timer, Settings, About
+- Live countdown with progress bar and status badges
+- JSON-RPC commands: sleeptimer.set, sleeptimer.status, sleeptimer.cancel
+- Jive menu integration for Squeezebox hardware players
+- Timer history with configurable max entries
+- Event integration: auto-cancel on player disconnect
+- Multi-player support: independent timers per player
+- Extend active timers by +15 minutes
