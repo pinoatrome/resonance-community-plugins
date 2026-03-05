@@ -12,7 +12,7 @@ Plugins listed here appear in the **Available** tab of the Resonance Plugin Mana
 
 | Plugin | Version | Description | Author |
 |--------|---------|-------------|--------|
-| [raopbridge](plugins/raopbridge/) | 0.1.0 | AirPlay bridge — uses philippe44's squeeze2raop to make AirPlay devices available as Squeezebox players | Pinoatrome |
+| [raopbridge](plugins/raopbridge/) | 0.1.0 | AirPlay bridge — uses philippe44's squeeze2raop to make AirPlay devices available as Squeezebox players. Full Web UI via Server-Driven UI (SDUI) with device management, settings, and per-device configuration. | Pinoatrome |
 
 ---
 
@@ -61,17 +61,19 @@ Plugins listed here appear in the **Available** tab of the Resonance Plugin Mana
 ### Repository Structure
 
 ```
-community/
+resonance-community-plugins/
 ├── .github/
 │   └── workflows/
 │       ├── build-release.yml    # Builds ZIP + SHA for tagged releases
 │       └── update-index.yml     # Generates index.json → GitHub Pages
 ├── plugins/
-│   └── your-plugin/             # One folder per plugin
+│   └── raopbridge/              # One folder per plugin
 │       ├── plugin.toml          # Plugin manifest (name, version, etc.)
-│       ├── __init__.py          # Plugin source code
-│       └── ...
-├── index.json                   # Auto-generated plugin index (do not edit)
+│       ├── __init__.py          # Plugin entry point (setup/teardown/get_ui)
+│       ├── bridge.py            # AirPlay bridge subprocess management
+│       ├── config.py            # Device & config XML parsing
+│       └── tests/               # Plugin test suite
+├── LICENSE
 └── README.md
 ```
 
@@ -150,10 +152,26 @@ We welcome community plugin contributions! Here's how to add your plugin:
    author = "Your Name"
    min_resonance_version = "0.1.0"
    category = "music"  # music, radio, podcast, tools, misc
+
+   [ui]
+   enabled = true              # Optional: enables a Web UI page via SDUI
+   sidebar_label = "My Plugin"
+   sidebar_icon = "sparkles"   # Any Lucide icon name
    ```
 
 4. **Test** your plugin locally by placing it in `data/installed_plugins/` of your Resonance server
 5. **Open a Pull Request** with a clear description of your plugin
+
+### Adding a Web UI (SDUI)
+
+Plugins can provide a full Web UI page without writing any JavaScript. Using the
+Server-Driven UI (SDUI) system, your plugin describes its UI declaratively in Python
+and the Resonance frontend renders it automatically.
+
+To add a UI page, implement `get_ui()` and `handle_action()` in your `__init__.py` and
+set `[ui] enabled = true` in `plugin.toml`. See the
+[SDUI documentation (§19)](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_API.md#19-server-driven-ui-sdui)
+and the [raopbridge plugin](plugins/raopbridge/) as a reference implementation.
 
 ### Plugin Guidelines
 
@@ -217,5 +235,7 @@ Community plugins are contributed under their respective licenses as specified b
 ## 🔗 Links
 
 - [Resonance Server](https://github.com/endegelaende/resonance-server) — the main server project
-- [Plugin API Documentation](https://github.com/endegelaende/resonance-server/blob/main/docs/) — how to write plugins
-- [Plugin System Architecture](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_UPGRADE.md) — technical details
+- [Plugin API Reference](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_API.md) — complete API docs including SDUI (§19)
+- [Plugin Tutorial](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_TUTORIAL.md) — step-by-step guide to building a plugin
+- [Plugin Repository Guide](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGIN_REPOSITORY.md) — how to publish plugins
+- [Plugin System Overview](https://github.com/endegelaende/resonance-server/blob/main/docs/PLUGINS.md) — general plugin system overview
