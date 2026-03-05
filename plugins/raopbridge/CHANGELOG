@@ -1,3 +1,21 @@
+0.2.0
+  - SDUI (Server-Driven UI) integration — full plugin UI via Resonance SDUI framework
+  - Added get_ui() returning a Page with five tabs: Status, Devices, Settings, Advanced, About
+  - Added handle_action() dispatcher for: activate, deactivate, restart, save_settings,
+    delete_device, toggle_device, update_device
+  - Status tab: bridge status badge, key-value info, activate/deactivate/restart buttons
+  - Devices tab: table with inline-editable name column, enable/disable toggle, delete actions,
+    per-device settings modal with General/Audio/Behaviour tabs
+  - Settings tab: form with binary select, interface/server inputs, auto-start/logging/debug
+    toggles, conditional debug category/level selects (visible_when)
+  - Advanced tab: read-only view of common options from bridge XML config (collapsible card)
+  - About tab: markdown card with plugin description and links
+  - Added [ui] section to plugin.toml (enabled=true, sidebar_label="AirPlay", sidebar_icon="cast")
+  - Per-device advanced overrides: sample_rate, codecs, resample, alac_encode, encryption,
+    send_metadata, send_coverart, mute_on_pause, auto_play, idle_timeout
+  - UX polish: collapsible cards, inline-editable table columns, device settings modal (lg size)
+  - Registered UI and action handlers in setup() via ctx.register_ui_handler/register_action_handler
+
 0.1.0
   - Migrated to Resonance community plugin repository
   - Binaries no longer bundled; downloaded on-demand from philippe44/LMS-Raop
