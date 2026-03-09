@@ -313,7 +313,7 @@ def dump_config(config: RaopConfig) -> str:
             if str(device_common_values[key]) == str(common_values[key]):
                 del device_common_values[key]
         if device_common_values:
-            logger.debug(f"Device (un)common values: {device_common_values}")
+            logger.debug("Device (un)common values: %s", device_common_values)
             rows.extend(format_common_options_values(device_common_values))
         rows.append('</device>')
 

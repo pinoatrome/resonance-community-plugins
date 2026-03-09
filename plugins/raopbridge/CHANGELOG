@@ -1,3 +1,5 @@
+0.2.1
+  - added Logs tab
 0.2.0
   - SDUI (Server-Driven UI) integration — full plugin UI via Resonance SDUI framework
   - Added get_ui() returning a Page with five tabs: Status, Devices, Settings, Advanced, About

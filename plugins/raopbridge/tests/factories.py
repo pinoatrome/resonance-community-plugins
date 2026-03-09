@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -11,6 +12,7 @@ import pytest
 
 from raopbridge.bridge import RaopBridge
 from raopbridge.config import RaopCommonOptions, RaopConfig, RaopDevice, parse_config
+from raopbridge.logs import RaopLogsEntry, RaopLogsReader
 
 
 @pytest.fixture
@@ -29,6 +31,67 @@ def popen_factory():
 
     def _make(**kwargs):
         return MockPopen(**kwargs)
+    return _make
+
+
+@pytest.fixture
+def file_pointer_factory():
+    class MockFilePointer:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.dim = kwargs.get('dim', 1024)
+            self.lines = kwargs.get('lines')
+
+        def seek(self, position: int, direction=os.SEEK_END) -> None:
+            if abs(position) > self.dim:
+                raise IOError('MockFilePointer')
+
+        def readlines(self) -> list[str]:
+            return self.lines
+
+    def _make(**kwargs):
+        return MockFilePointer(**kwargs)
+    return _make
+
+
+@pytest.fixture
+def logs_entry_raw_factory():
+    def _make(**kwargs) -> str:
+        timestamp = kwargs.pop('timestamp') if 'timestamp' in kwargs else '11:50:05.069'
+        category = kwargs.pop('category') if 'category' in kwargs else 'sendHELO:107'
+        pointer = kwargs.pop('pointer') if 'pointer' in kwargs else '0x102cba280'
+        msg = kwargs.pop('msg') if 'msg' in kwargs else 'cap: CanHTTPS=1,Model=squeezelite,ModelName=RaopBridge'
+        return f"[{timestamp}] {category} [{pointer}]: {msg}"
+    return _make
+
+
+@pytest.fixture
+def logs_entry_factory(logs_entry_raw_factory):
+    def _make(**kwargs) -> RaopLogsEntry:
+        raw_line = logs_entry_raw_factory(**kwargs)
+        return RaopLogsEntry.parse(raw_line)
+    return _make
+
+
+@pytest.fixture
+def logs_reader_factory():
+    def _make(**kwargs) -> RaopLogsReader:
+        path = kwargs.pop('path') if 'path' in kwargs else '/dev/null'
+        return RaopLogsReader(path)
+    return _make
+
+
+@pytest.fixture
+def logs_entry_factory():
+    def _make(**kwargs) -> RaopLogsEntry:
+        timestamp = kwargs.pop('timestamp') if 'timestamp' in kwargs else '11:50:05.069'
+        category = kwargs.pop('category') if 'category' in kwargs else 'sendHELO:107'
+        pointer = kwargs.pop('pointer') if 'pointer' in kwargs else '0x102cba280'
+        msg = kwargs.pop('msg') if 'msg' in kwargs else 'cap: CanHTTPS=1,Model=squeezelite,ModelName=RaopBridge'
+        return RaopLogsEntry(timestamp=timestamp,
+                             category=category,
+                             pointer=pointer,
+                             msg=msg)
     return _make
 
 
