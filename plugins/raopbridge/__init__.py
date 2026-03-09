@@ -89,7 +89,7 @@ _ctx: PluginContext | None = None
 # SDUI constants
 # ---------------------------------------------------------------------------
 
-_VOLUME_MODE_LABELS = {0: "Ignored", 1: "Software", 2: "Hardware"}
+_VOLUME_MODE_LABELS = {0: "Fixed", 1: "Software", 2: "Hardware"}
 
 _DEBUG_CATEGORIES = [
     SelectOption(value="all", label="All"),
@@ -575,11 +575,7 @@ def _build_device_modal(device: RaopDevice) -> Modal:
             name="volume_mode",
             label="Volume Mode",
             value=str(common.volume_mode),
-            options=[
-                SelectOption(value="0", label="Ignored"),
-                SelectOption(value="1", label="Software"),
-                SelectOption(value="2", label="Hardware"),
-            ],
+            options=[SelectOption(value=str(k), label=v) for k, v in _VOLUME_MODE_LABELS.items()]
         ),
         KeyValue(
             items=[
